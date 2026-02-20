@@ -3,7 +3,7 @@ import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
 export const conversations = sqliteTable('conversations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   telegramChatId: text('telegram_chat_id').notNull().unique(),
-  status: text('status', { enum: ['active', 'completed'] }).default('active').notNull(),
+  status: text('status', { enum: ['active', 'reviewing', 'completed'] }).default('active').notNull(),
   collectedData: text('collected_data').default('{}').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).$onUpdateFn(() => new Date()).notNull(),

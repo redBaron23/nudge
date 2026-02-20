@@ -1,7 +1,7 @@
 import type { Agenda, CollectedData } from '../onboarding/schema.js'
 import { getPendingFields, getCollectedFields, isComplete } from '../onboarding/flow.js'
 
-export function buildSystemPrompt(agenda: Agenda, collectedData: CollectedData): string {
+export function buildSystemPrompt(agenda: Agenda, collectedData: CollectedData, status: string): string {
   const collected = getCollectedFields(agenda, collectedData)
   const pending = getPendingFields(agenda, collectedData)
   const complete = isComplete(agenda, collectedData)
@@ -27,12 +27,14 @@ export function buildSystemPrompt(agenda: Agenda, collectedData: CollectedData):
   }
 
   let instruction: string
-  if (complete) {
+  if (status === 'reviewing' || (status === 'active' && complete)) {
     const optionalPending = pending.filter((f) => !f.required)
     const optionalNote = optionalPending.length > 0
       ? `\nMencioná que también podés configurar: ${optionalPending.map((f) => f.label.toLowerCase()).join(', ')}.`
       : ''
-    instruction = `Todos los datos obligatorios fueron recopilados. Hacé un resumen de la configuración y pedí confirmación al usuario.${optionalNote}`
+    instruction = `Presentá un resumen completo de toda la configuración y pedí confirmación explícita al usuario. Si el usuario quiere cambiar algo, preguntá qué dato corregir.${optionalNote}`
+  } else if (status === 'completed') {
+    instruction = `La configuración ya está completa.`
   } else {
     instruction = `Preguntá sobre el siguiente dato pendiente de forma natural.`
   }

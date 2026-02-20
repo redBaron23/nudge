@@ -20,6 +20,18 @@ The pattern is extensible to any onboarding flow (support, CRM, inventory, etc).
 Telegram Bot → Hono API Server → Claude Haiku (Anthropic API) → SQLite (Drizzle ORM)
 ```
 
+Layered internals:
+
+```
+Bot handlers / API routes (thin controllers)
+    └─→ OnboardingService (orchestration + business logic)
+            ├─→ AIService (Claude API calls: chat + extraction)
+            ├─→ ConversationRepository (conversations table)
+            ├─→ MessageRepository (messages table)
+            ├─→ prompts.ts (pure functions — prompt building)
+            └─→ flow.ts (pure functions — agenda loading + helpers)
+```
+
 ## Tech Stack
 
 - **Runtime:** Node.js + TypeScript (ESM)
@@ -41,25 +53,27 @@ nudge/
 ├── drizzle.config.ts
 ├── .env
 ├── src/
-│   ├── index.ts              # Hono server entrypoint
+│   ├── index.ts              # Hono server + API routes
 │   ├── config/
-│   │   └── env.ts            # Env vars validation (zod)
+│   │   ├── env.ts            # Env vars validation (zod)
+│   │   └── constants.ts      # Derived env (webhook URL resolution)
 │   ├── db/
 │   │   ├── client.ts         # SQLite + Drizzle setup
-│   │   ├── schema.ts         # Drizzle table definitions
-│   │   └── migrate.ts        # Migration runner
+│   │   └── schema.ts         # Drizzle table definitions
 │   ├── bot/
 │   │   └── telegram.ts       # grammY bot + webhook handler
 │   ├── ai/
 │   │   ├── client.ts         # Anthropic SDK setup
-│   │   ├── prompts.ts        # System prompts for onboarding
-│   │   └── conversation.ts   # Conversation logic with AI
+│   │   └── prompts.ts        # System prompt builders (pure functions)
 │   ├── onboarding/
-│   │   ├── schema.ts         # Business config types
-│   │   ├── flow.ts           # Onboarding flow logic
-│   │   └── extractor.ts      # Extract structured data from AI
-│   └── types/
-│       └── index.ts          # Shared types
+│   │   ├── schema.ts         # Agenda + CollectedData types
+│   │   └── flow.ts           # Agenda loader + completion helpers (pure functions)
+│   ├── repositories/
+│   │   ├── conversation.repository.ts  # DB access for conversations
+│   │   └── message.repository.ts       # DB access for messages
+│   └── services/
+│       ├── ai.service.ts               # Claude API: chat + extraction
+│       └── onboarding.service.ts       # Orchestrates the full onboarding flow
 └── onboarding/
     └── agenda.yaml           # Declarative: what data to collect
 ```
@@ -67,11 +81,16 @@ nudge/
 ## Core Flow
 
 1. Business owner sends message via Telegram
-2. Server looks up or creates conversation state in SQLite
-3. Claude Haiku receives: onboarding definition + collected data so far + user message
+2. `OnboardingService` looks up or creates conversation in SQLite
+3. Claude Haiku receives: system prompt (agenda + collected data + status) + message history + user message
 4. AI responds naturally in Argentine Spanish (voseo), asking next relevant question
-5. AI extracts structured data from free-text responses
+5. A second Claude call extracts structured data from the exchange
 6. State updates in DB, response sent back via Telegram
+
+**Status transitions:** `active` → `reviewing` → `completed`
+- **active:** AI asks questions, extraction fills `collectedData`
+- **reviewing:** All fields collected — AI presents a summary for confirmation
+- **completed:** User confirmed — conversation is locked
 
 ## Key Design Decisions
 
@@ -82,12 +101,25 @@ nudge/
 - **SQLite for MVP:** Zero config, single file. Drizzle ORM makes migration to Postgres trivial later.
 - **Incremental setup:** Start with bare Hono server, add features one at a time.
 
+## Bot Commands
+
+- `/start` — Begin onboarding (or restart if already completed)
+- `/reiniciar` — Reset conversation and start over
+
+## API Routes
+
+- `GET /` — Health check
+- `POST /webhook` — Telegram webhook
+- `GET /api/conversations` — List all conversations with parsed `collectedData`
+- `GET /api/conversations/:chatId` — Get a single conversation by Telegram chat ID
+
 ## Commands
 
 ```bash
 pnpm dev          # Dev server with hot reload
 pnpm build        # Compile TypeScript
 pnpm start        # Run production build
+pnpm db:push      # Push schema changes to SQLite
 ```
 
 ## Environment Variables
@@ -99,11 +131,18 @@ TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 WEBHOOK_URL=https://xxx.ngrok.io
 ```
 
+## Coding Conventions
+
+- **Repositories** for DB access — singleton classes, one per table (e.g. `ConversationRepository`)
+- **Services** for business logic — singleton classes that orchestrate repos + AI (e.g. `OnboardingService`)
+- **Bot handlers / API routes** stay thin — delegate to services immediately
+- **Pure functions** for stateless logic — `prompts.ts` (prompt builders), `flow.ts` (agenda helpers)
+
 ## Development Roadmap
 
 - [x] Step 1: Hono server running with pnpm dev
-- [ ] Step 2: SQLite + Drizzle setup with schema
-- [ ] Step 3: Telegram bot connected via webhook
-- [ ] Step 4: Claude Haiku integration with conversation loop
-- [ ] Step 5: Onboarding YAML parser + flow engine
-- [ ] Step 6: End-to-end: chat configures a business agenda
+- [x] Step 2: SQLite + Drizzle setup with schema
+- [x] Step 3: Telegram bot connected via webhook
+- [x] Step 4: Claude Haiku integration with conversation loop
+- [x] Step 5: Onboarding YAML parser + flow engine
+- [x] Step 6: End-to-end: chat configures a business agenda
