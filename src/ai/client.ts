@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { env } from '../config/env.js'
+import { ENV } from '../config/constants.js'
 
 export const anthropic = new Anthropic({
-  apiKey: env.ANTHROPIC_API_KEY,
+  apiKey: ENV.ANTHROPIC_API_KEY,
 })
