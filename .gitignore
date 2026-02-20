@@ -5,3 +5,4 @@ dist/
 *.db-shm
 drizzle/
 .env
+wa-auth/

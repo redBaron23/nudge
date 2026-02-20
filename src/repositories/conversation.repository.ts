@@ -1,18 +1,24 @@
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { conversations } from '../db/schema.js'
 
 type ConversationStatus = 'active' | 'reviewing' | 'completed'
+export type Channel = 'telegram' | 'whatsapp'
 
 class ConversationRepository {
-  findByTelegramChatId(chatId: string) {
+  findByExternalId(channel: Channel, externalId: string) {
     return db.query.conversations.findFirst({
-      where: eq(conversations.telegramChatId, chatId),
+      where: and(eq(conversations.channel, channel), eq(conversations.externalId, externalId)),
     })
   }
 
-  async create(telegramChatId: string) {
-    const [created] = await db.insert(conversations).values({ telegramChatId }).returning()
+  async create(channel: Channel, externalId: string, opts?: { token?: string; userName?: string }) {
+    const [created] = await db.insert(conversations).values({
+      channel,
+      externalId,
+      token: opts?.token,
+      userName: opts?.userName,
+    }).returning()
     return created
   }
 

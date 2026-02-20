@@ -1,0 +1,96 @@
+{
+  "id": "appointment-scheduling",
+  "name": "YaTurno Appointment Scheduling Setup",
+  "description": "Collects business configuration to create an agenda with services, professionals, and working hours.",
+  "fields": {
+    "business_name": {
+      "type": "string",
+      "required": true,
+      "description": "Name of the business"
+    },
+    "business_type": {
+      "type": "enum",
+      "required": true,
+      "values": ["health", "beauty", "services", "consulting", "education", "gastronomy", "sports", "other"],
+      "description": "Type of business"
+    },
+    "description": {
+      "type": "string",
+      "required": false,
+      "description": "Brief description of the business"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "required": false,
+      "description": "Business contact email"
+    },
+    "phone": {
+      "type": "string",
+      "required": false,
+      "description": "Business phone number"
+    },
+    "address": {
+      "type": "string",
+      "required": false,
+      "description": "Business address"
+    },
+    "working_hours": {
+      "type": "object",
+      "required": false,
+      "description": "Weekly schedule. Keys are lowercase day names (monday-sunday). Each day has 'enabled' (boolean) and 'ranges' (array of {start, end} in HH:MM format).",
+      "example": {
+        "monday": { "enabled": true, "ranges": [{ "start": "09:00", "end": "18:00" }] },
+        "tuesday": { "enabled": true, "ranges": [{ "start": "09:00", "end": "18:00" }] },
+        "wednesday": { "enabled": true, "ranges": [{ "start": "09:00", "end": "18:00" }] },
+        "thursday": { "enabled": true, "ranges": [{ "start": "09:00", "end": "18:00" }] },
+        "friday": { "enabled": true, "ranges": [{ "start": "09:00", "end": "18:00" }] },
+        "saturday": { "enabled": false, "ranges": [] },
+        "sunday": { "enabled": false, "ranges": [] }
+      }
+    },
+    "services": {
+      "type": "array",
+      "required": false,
+      "description": "List of services offered. If empty, a default 'Servicio General' is created.",
+      "items": {
+        "name": { "type": "string", "required": true, "description": "Service name" },
+        "duration_minutes": { "type": "integer", "required": true, "description": "How long the service takes in minutes" },
+        "calendar_duration_minutes": { "type": "integer", "required": false, "description": "Time blocked on calendar (defaults to duration_minutes). Use when buffer time is needed between appointments." },
+        "price": { "type": "number", "required": false, "default": 0, "description": "Price in local currency. 0 = free service." },
+        "description": { "type": "string", "required": false, "description": "Service description" }
+      }
+    },
+    "booking_rules": {
+      "type": "object",
+      "required": false,
+      "description": "Booking policy configuration",
+      "properties": {
+        "min_advance_days": { "type": "integer", "default": 0, "description": "Minimum days in advance a booking can be made" },
+        "max_advance_days": { "type": "integer", "default": 30, "description": "Maximum days in advance a booking can be made" },
+        "min_cancellation_hours": { "type": "integer", "default": 2, "description": "Minimum hours before appointment to allow cancellation" },
+        "slot_interval_minutes": { "type": "integer", "default": 15, "description": "Time slot interval in minutes (e.g. 15, 30, 60)" },
+        "max_parallel_appointments": { "type": "integer", "default": 1, "description": "Max appointments at the same time slot" }
+      }
+    }
+  },
+  "completion": {
+    "message_template": "¡Listo! Tu agenda ya está creada 🎉 Podés verla acá: {url}",
+    "response_fields": ["url", "slug", "agendaId"]
+  },
+  "webhook": {
+    "event": "onboarding.completed",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Webhook-Secret": "<configured secret>"
+    },
+    "body_format": {
+      "event": "onboarding.completed",
+      "definitionId": "appointment-scheduling",
+      "token": "yaturno_<userId>",
+      "data": "<collected fields>",
+      "completedAt": "<ISO 8601 timestamp>"
+    }
+  }
+}

@@ -1,9 +1,19 @@
-import { eq, asc } from 'drizzle-orm'
+import { eq, asc, desc } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { messages } from '../db/schema.js'
 
 class MessageRepository {
-  findByConversationId(conversationId: number) {
+  async findByConversationId(conversationId: number, limit?: number) {
+    if (limit) {
+      const rows = await db
+        .select({ role: messages.role, content: messages.content })
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(desc(messages.createdAt))
+        .limit(limit)
+      return rows.reverse()
+    }
+
     return db
       .select({ role: messages.role, content: messages.content })
       .from(messages)

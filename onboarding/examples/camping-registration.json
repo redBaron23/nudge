@@ -1,0 +1,58 @@
+{
+  "id": "camping-registration",
+  "name": "Registro de Camping",
+  "description": "Configuración del sistema de registro para un camping o glamping",
+  "fields": [
+    {
+      "key": "campground_name",
+      "type": "string",
+      "required": true,
+      "description": "Nombre del camping o glamping"
+    },
+    {
+      "key": "location",
+      "type": "string",
+      "required": true,
+      "description": "Ubicación del camping (ciudad, provincia o dirección)"
+    },
+    {
+      "key": "spots",
+      "type": "array",
+      "required": true,
+      "description": "Tipos de parcelas o alojamientos disponibles",
+      "items": {
+        "name": { "type": "string", "description": "Nombre del tipo de parcela" },
+        "type": { "type": "string", "description": "Tipo (carpa, motorhome, cabaña, glamping, etc.)" },
+        "capacity": { "type": "number", "description": "Capacidad máxima de personas" }
+      }
+    },
+    {
+      "key": "amenities",
+      "type": "array",
+      "required": true,
+      "description": "Servicios e instalaciones del camping",
+      "items": {
+        "name": { "type": "string", "description": "Nombre del servicio" },
+        "description": { "type": "string", "description": "Descripción breve" }
+      }
+    },
+    {
+      "key": "check_in_out",
+      "type": "object",
+      "required": true,
+      "description": "Horarios de check-in y check-out"
+    },
+    {
+      "key": "rates",
+      "type": "object",
+      "required": true,
+      "description": "Tarifas por temporada y tipo de parcela"
+    },
+    {
+      "key": "rules",
+      "type": "object",
+      "required": false,
+      "description": "Reglas del camping: horario de silencio, política de mascotas, etc."
+    }
+  ]
+}

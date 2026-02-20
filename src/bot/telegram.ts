@@ -6,14 +6,24 @@ export const bot = new Bot(ENV.TELEGRAM_BOT_TOKEN)
 
 bot.command('start', async (ctx) => {
   const chatId = ctx.chat.id.toString()
-  await onboardingService.startConversation(chatId)
-  await ctx.reply('Hola! Soy tu asistente de configuración. Vamos a configurar tu sistema de turnos. Para empezar, contame: ¿cómo se llama tu negocio?')
+  try {
+    const { response } = await onboardingService.startConversation('telegram', chatId)
+    await ctx.reply(response)
+  } catch (error) {
+    console.error('Error in /start:', error)
+    await ctx.reply('Perdón, tuve un problema iniciando. ¿Podés intentar de nuevo?')
+  }
 })
 
 bot.command('reiniciar', async (ctx) => {
   const chatId = ctx.chat.id.toString()
-  await onboardingService.resetConversation(chatId)
-  await ctx.reply('Listo, reinicié la configuración. Empecemos de nuevo: ¿cómo se llama tu negocio?')
+  try {
+    const { response } = await onboardingService.resetConversation('telegram', chatId)
+    await ctx.reply(response)
+  } catch (error) {
+    console.error('Error in /reiniciar:', error)
+    await ctx.reply('Perdón, tuve un problema reiniciando. ¿Podés intentar de nuevo?')
+  }
 })
 
 bot.on('message:text', async (ctx) => {
@@ -21,8 +31,12 @@ bot.on('message:text', async (ctx) => {
   const userText = ctx.message.text
 
   try {
-    const { response } = await onboardingService.handleMessage(chatId, userText)
+    const { response, followUp } = await onboardingService.handleMessage('telegram', chatId, userText)
     await ctx.reply(response)
+    if (followUp) {
+      console.log(`[telegram] Sending follow-up to ${chatId}`)
+      await ctx.reply(followUp)
+    }
   } catch (error) {
     console.error('Error handling message:', error)
     await ctx.reply('Perdón, tuve un problema procesando tu mensaje. ¿Podés intentar de nuevo?')

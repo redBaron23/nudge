@@ -1,81 +1,111 @@
-import { conversationRepository } from '../repositories/conversation.repository.js'
+import { conversationRepository, type Channel } from '../repositories/conversation.repository.js'
 import { messageRepository } from '../repositories/message.repository.js'
 import { aiService } from './ai.service.js'
 import { buildSystemPrompt } from '../ai/prompts.js'
-import { loadAgenda, isComplete } from '../onboarding/flow.js'
+import { loadDefinition, isComplete as checkComplete, buildCompletionMessage } from '../onboarding/flow.js'
+import { env } from '../config/env.js'
+import { webhookService } from './webhook.service.js'
 import type { CollectedData } from '../onboarding/schema.js'
 
 const COMPLETED_MESSAGE = 'Tu configuración ya está completa. Si necesitás hacer cambios, usá /reiniciar para empezar de nuevo.'
 
-const AFFIRMATIVE_RE = /\b(sí|si|dale|perfecto|ok|está bien|todo bien|confirmo|correcto|listo)\b/i
-
 class OnboardingService {
-  async handleMessage(telegramChatId: string, userMessage: string): Promise<{ response: string }> {
-    // Find or create conversation
-    let conversation = await conversationRepository.findByTelegramChatId(telegramChatId)
+  async handleMessage(channel: Channel, externalId: string, userMessage: string): Promise<{ response: string; followUp?: string }> {
+    let conversation = await conversationRepository.findByExternalId(channel, externalId)
     if (!conversation) {
-      conversation = await conversationRepository.create(telegramChatId)
+      conversation = await conversationRepository.create(channel, externalId)
     }
 
-    // Short-circuit if completed
     if (conversation.status === 'completed') {
       return { response: COMPLETED_MESSAGE }
     }
 
-    // Parse state
     const collectedData: CollectedData = JSON.parse(conversation.collectedData)
-    const agenda = loadAgenda()
-    const systemPrompt = buildSystemPrompt(agenda, collectedData, conversation.status)
+    const definition = loadDefinition(env.ONBOARDING_DEFINITION)
+    const systemPrompt = buildSystemPrompt(definition, collectedData, conversation.status)
 
-    // Load history + save user message
-    const history = await messageRepository.findByConversationId(conversation.id)
+    const history = await messageRepository.findByConversationId(conversation.id, 20)
     await messageRepository.create(conversation.id, 'user', userMessage)
 
-    // Call Claude
-    const assistantText = await aiService.chat(systemPrompt, history, userMessage)
-    await messageRepository.create(conversation.id, 'assistant', assistantText)
+    const result = await aiService.respond(systemPrompt, history, userMessage)
+    await messageRepository.create(conversation.id, 'assistant', result.message)
 
-    // Extraction — skip on first turn (no history yet)
-    if (history.length > 0) {
-      const updatedData = await aiService.extract(userMessage, assistantText, agenda, collectedData)
-      const dataChanged = JSON.stringify(updatedData) !== JSON.stringify(collectedData)
+    let followUp: string | undefined
 
-      if (conversation.status === 'active') {
-        if (dataChanged) {
-          const newStatus = isComplete(agenda, updatedData) ? 'reviewing' : 'active'
-          await conversationRepository.updateData(conversation.id, JSON.stringify(updatedData), newStatus)
+    if (result.extractedData) {
+      const updatedData = { ...collectedData, ...result.extractedData }
+
+      if (result.isComplete) {
+        console.log(`[onboarding] Conversation completed for ${externalId}`)
+        await conversationRepository.updateData(conversation.id, JSON.stringify(updatedData), 'completed')
+        const webhookResponse = await webhookService.sendCompletedConfig(externalId, updatedData, env.ONBOARDING_DEFINITION, channel)
+        console.log(`[onboarding] Webhook response:`, webhookResponse)
+        const completionMsg = buildCompletionMessage(definition, webhookResponse)
+        if (completionMsg) {
+          console.log(`[onboarding] Completion message: ${completionMsg}`)
+          followUp = completionMsg
+        } else {
+          console.log(`[onboarding] No completion message`)
         }
-      } else if (conversation.status === 'reviewing') {
-        if (dataChanged) {
-          await conversationRepository.updateData(conversation.id, JSON.stringify(updatedData))
-        } else if (AFFIRMATIVE_RE.test(userMessage)) {
-          await conversationRepository.updateStatus(conversation.id, 'completed')
-        }
+      } else if (checkComplete(definition, updatedData)) {
+        await conversationRepository.updateData(conversation.id, JSON.stringify(updatedData), 'reviewing')
+      } else {
+        await conversationRepository.updateData(conversation.id, JSON.stringify(updatedData))
+      }
+    } else if (result.isComplete) {
+      console.log(`[onboarding] Conversation completed for ${externalId}`)
+      await conversationRepository.updateStatus(conversation.id, 'completed')
+      const webhookResponse = await webhookService.sendCompletedConfig(externalId, collectedData, env.ONBOARDING_DEFINITION, channel)
+      console.log(`[onboarding] Webhook response:`, webhookResponse)
+      const completionMsg = buildCompletionMessage(definition, webhookResponse)
+      if (completionMsg) {
+        console.log(`[onboarding] Completion message: ${completionMsg}`)
+        followUp = completionMsg
+      } else {
+        console.log(`[onboarding] No completion message`)
       }
     }
 
-    return { response: assistantText }
+    return { response: result.message, followUp }
   }
 
-  async resetConversation(telegramChatId: string) {
-    const conversation = await conversationRepository.findByTelegramChatId(telegramChatId)
-    if (!conversation) return
+  async startConversation(channel: Channel, externalId: string): Promise<{ response: string }> {
+    let conversation = await conversationRepository.findByExternalId(channel, externalId)
 
-    await messageRepository.deleteByConversationId(conversation.id)
-    await conversationRepository.reset(conversation.id)
-  }
-
-  async startConversation(telegramChatId: string) {
-    const conversation = await conversationRepository.findByTelegramChatId(telegramChatId)
-    if (!conversation) {
-      await conversationRepository.create(telegramChatId)
-      return
-    }
-
-    if (conversation.status === 'completed') {
+    if (conversation && conversation.status === 'completed') {
       await messageRepository.deleteByConversationId(conversation.id)
       await conversationRepository.reset(conversation.id)
     }
+
+    if (!conversation) {
+      conversation = await conversationRepository.create(channel, externalId)
+    }
+
+    const definition = loadDefinition(env.ONBOARDING_DEFINITION)
+    const systemPrompt = buildSystemPrompt(definition, {}, 'active')
+
+    const result = await aiService.respond(systemPrompt, [], 'Hola, quiero configurar mi negocio')
+    await messageRepository.create(conversation.id, 'assistant', result.message)
+
+    return { response: result.message }
+  }
+
+  async resetConversation(channel: Channel, externalId: string): Promise<{ response: string }> {
+    const conversation = await conversationRepository.findByExternalId(channel, externalId)
+    if (!conversation) {
+      return this.startConversation(channel, externalId)
+    }
+
+    await messageRepository.deleteByConversationId(conversation.id)
+    await conversationRepository.reset(conversation.id)
+
+    const definition = loadDefinition(env.ONBOARDING_DEFINITION)
+    const systemPrompt = buildSystemPrompt(definition, {}, 'active')
+
+    const result = await aiService.respond(systemPrompt, [], 'Hola, quiero reiniciar la configuración de mi negocio')
+    await messageRepository.create(conversation.id, 'assistant', result.message)
+
+    return { response: result.message }
   }
 }
 

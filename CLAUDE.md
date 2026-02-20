@@ -17,7 +17,18 @@ The pattern is extensible to any onboarding flow (support, CRM, inventory, etc).
 ## Architecture
 
 ```
-Telegram Bot → Hono API Server → Claude Haiku (Anthropic API) → SQLite (Drizzle ORM)
+                ┌── Telegram (grammY) ──────┐
+                │                            ▼
+User chats ─────┤                     Hono API Server
+                │                       │        │
+                └── WhatsApp (Baileys) ──┘        │
+                       (future)             ▼          ▼
+                                       Claude Haiku    SQLite
+                                            │
+                                  ┌─────────┴─────────┐
+                                  │  Onboarding Mode   │  Support Mode
+                                  │  (configure biz)   │  (answer FAQs)
+                                  └────────────────────┘
 ```
 
 Layered internals:
@@ -75,7 +86,8 @@ nudge/
 │       ├── ai.service.ts               # Claude API: chat + extraction
 │       └── onboarding.service.ts       # Orchestrates the full onboarding flow
 └── onboarding/
-    └── agenda.yaml           # Declarative: what data to collect
+    └── examples/
+        └── appointment-scheduling.json  # Example onboarding definition
 ```
 
 ## Core Flow
@@ -92,10 +104,18 @@ nudge/
 - **reviewing:** All fields collected — AI presents a summary for confirmation
 - **completed:** User confirmed — conversation is locked
 
+## Modes
+
+### Onboarding (current)
+Guides business owner through setup. Loads a JSON definition that describes what data to collect. AI asks questions, extracts structured data, builds config.
+
+### Support (future)
+Answers customer FAQs based on a knowledge base provided by the SaaS. Same conversation engine, different system prompt and no data extraction.
+
 ## Key Design Decisions
 
 - **AI-first extraction:** No rigid forms. AI understands "abrimos de 9 a 18 de lunes a viernes" and extracts structured hours.
-- **Declarative onboarding:** YAML files define what to collect. AI figures out how to ask.
+- **Configurable onboarding:** JSON definition files describe what data to collect. Each SaaS client provides their own definition (appointment scheduling, camping registration, etc). The AI adapts automatically — no code changes needed per client.
 - **Webhook-based Telegram:** No polling.
 - **Spanish-first:** Argentine Spanish with voseo.
 - **SQLite for MVP:** Zero config, single file. Drizzle ORM makes migration to Postgres trivial later.
@@ -140,9 +160,16 @@ WEBHOOK_URL=https://xxx.ngrok.io
 
 ## Development Roadmap
 
-- [x] Step 1: Hono server running with pnpm dev
-- [x] Step 2: SQLite + Drizzle setup with schema
-- [x] Step 3: Telegram bot connected via webhook
-- [x] Step 4: Claude Haiku integration with conversation loop
-- [x] Step 5: Onboarding YAML parser + flow engine
-- [x] Step 6: End-to-end: chat configures a business agenda
+### Done
+- [x] Hono server running with pnpm dev
+- [x] SQLite + Drizzle setup with schema
+- [x] Telegram bot connected via webhook
+- [x] Claude Haiku integration with conversation loop
+- [x] Onboarding flow with YAML parser + extraction
+- [x] End-to-end: chat configures a business agenda
+
+### Next
+- [ ] Configurable onboarding: JSON definitions instead of hardcoded YAML (multi-tenant)
+- [ ] Deploy to Railway
+- [ ] WhatsApp channel via Baileys (same conversation engine)
+- [ ] Basic support mode (answer FAQs from a knowledge base)
