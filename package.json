@@ -4,14 +4,14 @@
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsc",
-    "start": "npx drizzle-kit push && node dist/index.js",
+    "start": "node dist/index.js",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@hono/node-server": "^1",
+    "@libsql/client": "^0.17.0",
     "@whiskeysockets/baileys": "7.0.0-rc.9",
-    "better-sqlite3": "^12.6.2",
     "drizzle-orm": "^0.45.1",
     "grammy": "^1.40.0",
     "hono": "^4",
@@ -23,12 +23,10 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
       "esbuild"
     ]
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22",
     "@types/qrcode": "^1.5.6",
     "drizzle-kit": "^0.31.9",
