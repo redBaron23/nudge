@@ -5,4 +5,4 @@ import * as schema from './schema.js'
 const sqlite = new Database('nudge.db')
 sqlite.pragma('journal_mode = WAL')
 
-export const db = drizzle(sqlite, { schema })
+export const db = drizzle(sqlite, { schema, logger: true })

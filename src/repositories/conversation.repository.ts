@@ -32,8 +32,13 @@ class ConversationRepository {
     await db.update(conversations).set({ status }).where(eq(conversations.id, id))
   }
 
-  async reset(id: number) {
-    await db.update(conversations).set({ collectedData: '{}', status: 'active' }).where(eq(conversations.id, id))
+  async reset(id: number, opts?: { token?: string; userName?: string }) {
+    await db.update(conversations).set({
+      collectedData: '{}',
+      status: 'active',
+      ...(opts?.token !== undefined && { token: opts.token }),
+      ...(opts?.userName !== undefined && { userName: opts.userName }),
+    }).where(eq(conversations.id, id))
   }
 
   findAll() {

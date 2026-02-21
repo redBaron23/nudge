@@ -6,12 +6,21 @@ const cache = new Map<string, OnboardingDefinition>()
 
 export function loadDefinition(id: string): OnboardingDefinition {
   const cached = cache.get(id)
-  if (cached) return cached
+  if (cached) {
+    console.log(`[flow] Definition "${id}" served from cache`)
+    return cached
+  }
 
+  console.log(`[flow] Loading definition "${id}" from disk`)
   const raw = readFileSync(join(process.cwd(), `onboarding/examples/${id}.json`), 'utf-8')
   const definition = onboardingDefinitionSchema.parse(JSON.parse(raw))
   cache.set(id, definition)
   return definition
+}
+
+export function clearDefinitionCache(): void {
+  console.log(`[flow] Clearing definition cache (${cache.size} entries)`)
+  cache.clear()
 }
 
 export function getPendingFields(definition: OnboardingDefinition, collectedData: CollectedData): [string, OnboardingField][] {

@@ -6,6 +6,7 @@ import { bot, handleWebhook } from './bot/telegram.js'
 import { conversationRepository } from './repositories/conversation.repository.js'
 import { messageRepository } from './repositories/message.repository.js'
 import { init as whatsappInit, getQR, isConnected, sendMessage } from './channels/whatsapp.js'
+import { normalizePhone } from './utils/phone.js'
 
 const app = new Hono()
 
@@ -44,14 +45,23 @@ app.post('/api/whatsapp/send', async (c) => {
 })
 
 app.post('/api/nudge', async (c) => {
-  const { phone, userName, token } = await c.req.json<{ phone: string; userName: string; token: string }>()
+  const body = await c.req.json<{ phone: string; userName: string; token: string }>()
+  console.log('[nudge] Received request body:', JSON.stringify(body))
+  const phone = normalizePhone(body.phone)
+  const { userName, token } = body
 
   let conversation = await conversationRepository.findByExternalId('whatsapp', phone)
-  if (!conversation) {
+  if (conversation) {
+    await messageRepository.deleteByConversationId(conversation.id)
+    await conversationRepository.reset(conversation.id, { token, userName })
+  } else {
     conversation = await conversationRepository.create('whatsapp', phone, { token, userName })
   }
 
-  const message = `¡Hola ${userName}! Soy el asistente de YaTurno. Vi que tenés cuenta pero todavía no armaste tu agenda. ¿Querés que te ayude a configurarla en 2 minutos por acá?`
+  const check = await conversationRepository.findByExternalId('whatsapp', phone)
+  console.log('[nudge] DB check after save - token:', check?.token, 'id:', check?.id)
+
+  const message = `¡Hola ${userName}! Soy tu asistente de configuración. Vi que tenés cuenta pero todavía no armaste tu agenda. ¿Querés que te ayude a configurarla en 2 minutos por acá?`
   await sendMessage(phone, message)
   await messageRepository.create(conversation.id, 'assistant', message)
 

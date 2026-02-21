@@ -1,9 +1,11 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
 import type { WASocket } from '@whiskeysockets/baileys'
-import { parsePhoneNumber } from 'libphonenumber-js'
 import pino from 'pino'
 import PQueue from 'p-queue'
 import { onboardingService } from '../services/onboarding.service.js'
+import { conversationRepository } from '../repositories/conversation.repository.js'
+import { messageRepository } from '../repositories/message.repository.js'
+import { normalizePhone } from '../utils/phone.js'
 
 const sendQueue = new PQueue({ concurrency: 1 })
 
@@ -59,11 +61,17 @@ export async function init() {
         console.log(`[whatsapp] Using remoteJidAlt: ${msg.key.remoteJidAlt}`)
       }
 
-      const phone = jid.replace('@s.whatsapp.net', '')
+      const phone = normalizePhone(jid.replace('@s.whatsapp.net', ''))
       const text = msg.message.conversation || msg.message.extendedTextMessage?.text
       if (!text) continue
 
       console.log(`[whatsapp] Received from ${phone}: ${text}`)
+
+      const existingConversation = await conversationRepository.findByExternalId('whatsapp', phone)
+      if (existingConversation?.status === 'completed') {
+        await messageRepository.deleteByConversationId(existingConversation.id)
+        await conversationRepository.reset(existingConversation.id)
+      }
 
       try {
         const { response, followUp } = await onboardingService.handleMessage('whatsapp', phone, text)
@@ -71,6 +79,8 @@ export async function init() {
         if (followUp) {
           console.log(`[whatsapp] Sending follow-up to ${phone}`)
           await sendMessage(phone, followUp)
+        } else {
+          console.log(`[whatsapp] No follow-up to send for ${phone}`)
         }
       } catch (error) {
         console.error('[whatsapp] Error handling message:', error)
@@ -90,21 +100,6 @@ export function isConnected(): boolean {
   return connected
 }
 
-function normalizePhone(phone: string): string {
-  const parsed = parsePhoneNumber(phone, 'AR')
-  if (!parsed) throw new Error(`Invalid phone number: ${phone}`)
-  let normalized = parsed.format('E.164').replace('+', '')
-
-  // WhatsApp AR mobile JIDs require "9" after country code "54"
-  if (parsed.country === 'AR' && normalized.startsWith('54') && !normalized.startsWith('549')) {
-    normalized = '549' + normalized.slice(2)
-  }
-
-  if (normalized !== phone) {
-    console.log(`[whatsapp] Normalizing phone: ${phone} → ${normalized}`)
-  }
-  return normalized
-}
 
 async function sendWithRetry(phone: string, text: string) {
   const normalized = normalizePhone(phone)

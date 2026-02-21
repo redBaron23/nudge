@@ -2,8 +2,16 @@ import { env } from '../config/env.js'
 import type { CollectedData } from '../onboarding/schema.js'
 
 class WebhookService {
-  async sendCompletedConfig(conversationId: string, collectedData: CollectedData, definitionId: string, channel: string): Promise<Record<string, unknown> | null> {
-    if (!env.WEBHOOK_TARGET_URL) return null
+  async sendCompletedConfig(
+    collectedData: CollectedData,
+    definitionId: string,
+    token: string | null,
+  ): Promise<Record<string, unknown> | null> {
+    const url = env.WEBHOOK_TARGET_URL
+    if (!url) {
+      console.log('[webhook] WEBHOOK_TARGET_URL not set — skipping')
+      return null
+    }
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -13,31 +21,41 @@ class WebhookService {
       headers['X-Webhook-Secret'] = env.WEBHOOK_SECRET
     }
 
-    const body = JSON.stringify({
+    const payload = {
       event: 'onboarding.completed',
       definitionId,
-      channel,
+      token,
       data: collectedData,
-      conversationId,
       completedAt: new Date().toISOString(),
-    })
+    }
 
     try {
-      const response = await fetch(env.WEBHOOK_TARGET_URL, {
+      console.log(`[webhook] → POST ${url}`)
+      console.log(`[webhook] → Body:`, JSON.stringify(payload, null, 2))
+
+      const response = await fetch(url, {
         method: 'POST',
         headers,
-        body,
+        body: JSON.stringify(payload),
       })
-      console.log(`[webhook] POST ${env.WEBHOOK_TARGET_URL} → ${response.status}`)
 
       const contentType = response.headers.get('content-type') ?? ''
-      const responseBody = response.ok && contentType.includes('application/json')
-        ? await response.json() as Record<string, unknown>
-        : null
-      console.log(`[webhook] Response body:`, responseBody ? JSON.stringify(responseBody) : '(no JSON body)')
+      if (!response.ok) {
+        const text = await response.text()
+        console.log(`[webhook] ← ${response.status} Error:`, text)
+        return null
+      }
+      if (!contentType.includes('application/json')) {
+        const text = await response.text()
+        console.log(`[webhook] ← ${response.status} (non-JSON):`, text)
+        return null
+      }
+      const responseBody = await response.json() as Record<string, unknown>
+      console.log(`[webhook] ← ${response.status}`)
+      console.log(`[webhook] ← Body:`, JSON.stringify(responseBody, null, 2))
       return responseBody
     } catch (error) {
-      console.error(`[webhook] POST ${env.WEBHOOK_TARGET_URL} failed:`, error)
+      console.error(`[webhook] ← Error:`, error)
       return null
     }
   }
