@@ -8,6 +8,7 @@ process.on('unhandledRejection', (err) => {
 
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import QRCode from 'qrcode'
 import { ENV } from './config/constants.js'
 import { bot, handleWebhook } from './bot/telegram.js'
@@ -17,6 +18,12 @@ import { init as whatsappInit, getQR, isConnected, sendMessage } from './channel
 import { normalizePhone } from './utils/phone.js'
 
 const app = new Hono()
+
+app.use('*', cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'X-Webhook-Secret'],
+}))
 
 app.get('/', (c) => c.json({ status: 'ok' }))
 
