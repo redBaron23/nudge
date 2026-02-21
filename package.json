@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "npx drizzle-kit push && node dist/index.js",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
