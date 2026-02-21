@@ -9,6 +9,7 @@ const envSchema = z.object({
   ONBOARDING_DEFINITION: z.string().default('appointment-scheduling'),
   WEBHOOK_TARGET_URL: z.string().url().optional(),
   WEBHOOK_SECRET: z.string().optional(),
+  WHATSAPP_ENABLED: z.coerce.boolean().default(false),
 })
 
 export const env = envSchema.parse(process.env)

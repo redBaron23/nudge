@@ -12,41 +12,50 @@ const sendQueue = new PQueue({ concurrency: 1 })
 let sock: WASocket | null = null
 let currentQR: string | null = null
 let connected = false
+let reconnectAttempts = 0
+const MAX_RECONNECT_ATTEMPTS = 5
 
 export async function init() {
-  const { state, saveCreds } = await useMultiFileAuthState('./wa-auth')
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState('./wa-auth')
 
-  sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false,
-    logger: pino({ level: 'silent' }) as any,
-  })
+    sock = makeWASocket({
+      auth: state,
+      printQRInTerminal: false,
+      logger: pino({ level: 'silent' }) as any,
+    })
 
-  sock.ev.on('creds.update', saveCreds)
+    sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update
+    sock.ev.on('connection.update', (update) => {
+      const { connection, lastDisconnect, qr } = update
 
-    if (qr) {
-      currentQR = qr
-      console.log('[whatsapp] QR code available — scan at /api/whatsapp/qr')
-    }
-
-    if (connection === 'close') {
-      connected = false
-      const statusCode = (lastDisconnect?.error as any)?.output?.statusCode
-      if (statusCode !== DisconnectReason.loggedOut) {
-        console.log('[whatsapp] Connection closed, reconnecting...')
-        init()
-      } else {
-        console.log('[whatsapp] Logged out, not reconnecting')
+      if (qr) {
+        currentQR = qr
+        console.log('[whatsapp] QR code available — scan at /api/whatsapp/qr')
       }
-    } else if (connection === 'open') {
-      connected = true
-      currentQR = null
-      console.log('[whatsapp] Connected')
-    }
-  })
+
+      if (connection === 'close') {
+        connected = false
+        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode
+        if (statusCode === DisconnectReason.loggedOut) {
+          console.log('[whatsapp] Logged out, not reconnecting')
+        } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+          console.error(`[whatsapp] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, giving up`)
+        } else {
+          reconnectAttempts++
+          console.log(`[whatsapp] Connection closed, reconnecting (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`)
+          init().catch((err) => {
+            console.error('[whatsapp] Reconnect failed:', err)
+          })
+        }
+      } else if (connection === 'open') {
+        connected = true
+        currentQR = null
+        reconnectAttempts = 0
+        console.log('[whatsapp] Connected')
+      }
+    })
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
@@ -89,7 +98,10 @@ export async function init() {
     }
   })
 
-  console.log('[whatsapp] Message listener registered')
+    console.log('[whatsapp] Message listener registered')
+  } catch (error) {
+    console.error('[whatsapp] Init failed:', error)
+  }
 }
 
 export function getQR(): string | null {

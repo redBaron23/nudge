@@ -92,6 +92,10 @@ serve({ fetch: app.fetch, port: ENV.PORT }, (info) => {
   console.log(`Nudge running on http://localhost:${info.port}`)
 })
 
-whatsappInit().catch((err) => {
-  console.error('[whatsapp] Failed to initialize:', err)
-})
+if (ENV.WHATSAPP_ENABLED) {
+  whatsappInit().catch((err) => {
+    console.error('[whatsapp] Failed to initialize:', err)
+  })
+} else {
+  console.log('[whatsapp] Disabled (set WHATSAPP_ENABLED=true to enable)')
+}
