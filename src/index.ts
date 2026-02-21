@@ -1,3 +1,11 @@
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err)
+})
+
+process.on('unhandledRejection', (err) => {
+  console.error('[FATAL] Unhandled rejection:', err)
+})
+
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import QRCode from 'qrcode'
@@ -90,6 +98,7 @@ app.get('/api/conversations/:externalId', async (c) => {
 
 serve({ fetch: app.fetch, port: ENV.PORT }, (info) => {
   console.log(`Nudge running on http://localhost:${info.port}`)
+  console.log('Server started successfully, waiting for requests...')
 })
 
 if (ENV.WHATSAPP_ENABLED) {
